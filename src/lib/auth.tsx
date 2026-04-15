@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/lib/supabase';
 
 interface AuthState {
   signedIn: boolean;
@@ -18,6 +19,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [signedIn, setSignedIn] = useState(false);
   const [memberTier, setMemberTier] = useState<'paid' | 'free'>('paid');
   const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    // Restore session if one already exists (e.g. page refresh)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setSignedIn(true);
+    });
+
+    // Keep signedIn in sync with Supabase auth state
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSignedIn(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   return (
     <AuthContext.Provider value={{

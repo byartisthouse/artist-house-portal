@@ -88,7 +88,7 @@ export default function Sidebar() {
         <div style={{ fontSize: 11, color: C.dim }}>Signed in as</div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Member</div>
         <div style={{ fontSize: 10, color: C.dim, marginTop: 1 }}>{isPaid ? 'Pro plan' : 'Free tier'}</div>
-        <span onClick={() => setSignedIn(false)} style={{ fontSize: 11, color: C.dim, cursor: 'pointer', marginTop: 8, display: 'inline-block', textDecoration: 'underline' }}>Sign out</span>
+        <span onClick={() => { supabase.auth.signOut(); setSignedIn(false); }} style={{ fontSize: 11, color: C.dim, cursor: 'pointer', marginTop: 8, display: 'inline-block', textDecoration: 'underline' }}>Sign out</span>
       </div>
     </aside>
   );
