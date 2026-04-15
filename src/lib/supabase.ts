@@ -1,5 +1,10 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
+// Lazy singleton — createBrowserClient is only called on first use (in the
+// browser, inside useEffect), never during Next.js static prerendering.
+// Using @supabase/ssr so sessions are stored in cookies, making them
+// readable in middleware for /growth route protection.
 let _client: SupabaseClient | null = null;
 
 function getClient(): SupabaseClient {
@@ -12,13 +17,11 @@ function getClient(): SupabaseClient {
         'NEXT_PUBLIC_SUPABASE_ANON_KEY to your Vercel project settings.'
       );
     }
-    _client = createClient(url, key);
+    _client = createBrowserClient(url, key);
   }
   return _client;
 }
 
-// Proxy defers createClient() to first use (inside useEffect in the browser),
-// preventing the "supabaseUrl is required" crash during Next.js prerendering.
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_target, prop) {
     const client = getClient();

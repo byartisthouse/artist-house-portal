@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { C } from '@/lib/colors';
+import AppLauncher from '@/components/AppLauncher';
 
 interface Counts { coaching: number; contacts: number; sync: number; tools: number; guides: number; }
 
@@ -44,9 +45,12 @@ export default function Sidebar() {
 
   return (
     <aside className="flex flex-col shrink-0 overflow-y-auto" style={{ width: 230, borderRight: `1px solid ${C.border}`, position: 'sticky', top: 0, height: '100vh', background: C.surface, padding: '20px 12px' }}>
-      <div style={{ padding: '0 14px', marginBottom: 20 }}>
-        <div className="font-display" style={{ fontSize: 18, color: C.text }}>Artist House</div>
-        <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.dim }}>Resources</div>
+      <div style={{ padding: '0 14px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div className="font-display" style={{ fontSize: 18, color: C.text }}>Artist House</div>
+          <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.dim }}>Resources</div>
+        </div>
+        <AppLauncher />
       </div>
 
       {/* Admin tier switcher */}

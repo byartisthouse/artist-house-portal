@@ -1,0 +1,27 @@
+// AUSTERE Growth Engine — dark theme color constants
+export const G = {
+  bg: '#0A0A0A',
+  surface: '#141414',
+  surfaceAlt: '#1E1E1E',
+  surfaceHover: '#242424',
+  border: 'rgba(255,255,255,0.07)',
+  borderHover: 'rgba(255,255,255,0.14)',
+  text: '#F5F5F2',
+  muted: '#8A8A84',
+  dim: '#555550',
+  accent: '#16C98D',       // growth green
+  accentBg: 'rgba(22,201,141,0.10)',
+  accentBorder: 'rgba(22,201,141,0.25)',
+  red: '#F04040',
+  redBg: 'rgba(240,64,64,0.10)',
+  redBorder: 'rgba(240,64,64,0.25)',
+  amber: '#F59E0B',
+  amberBg: 'rgba(245,158,11,0.10)',
+  blue: '#3B82F6',
+  blueBg: 'rgba(59,130,246,0.10)',
+  purple: '#A855F7',
+  purpleBg: 'rgba(168,85,247,0.10)',
+  chartLine: '#16C98D',
+  chartGrid: 'rgba(255,255,255,0.04)',
+  chartDot: '#16C98D',
+};
