@@ -21,17 +21,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    // Restore session if one already exists (e.g. page refresh)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setSignedIn(true);
-    });
+    let subscription: { unsubscribe: () => void } | null = null;
+    try {
+      // Restore session if one already exists (e.g. page refresh)
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) setSignedIn(true);
+      });
 
-    // Keep signedIn in sync with Supabase auth state
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSignedIn(!!session);
-    });
+      // Keep signedIn in sync with Supabase auth state
+      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSignedIn(!!session);
+      });
+      subscription = data.subscription;
+    } catch {
+      // Supabase not configured — sign-in form still works manually
+    }
 
-    return () => subscription.unsubscribe();
+    return () => subscription?.unsubscribe();
   }, []);
 
   return (
