@@ -1,10 +1,6 @@
 import { createBrowserClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// Lazy singleton — createBrowserClient is only called on first use (in the
-// browser, inside useEffect), never during Next.js static prerendering.
-// Using @supabase/ssr so sessions are stored in cookies, making them
-// readable in middleware for /growth route protection.
 let _client: SupabaseClient | null = null;
 
 function getClient(): SupabaseClient {
