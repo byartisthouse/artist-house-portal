@@ -18,9 +18,9 @@ function NavItem({ href, label, active, icon }: {
         display: 'flex',
         alignItems: 'center',
         gap: 10,
-        padding: '8px 12px',
+        padding: '8px 14px',
         borderRadius: 6,
-        background: active ? G.surfaceAlt : 'transparent',
+        background: active ? 'rgba(0,0,0,0.04)' : 'transparent',
         color: active ? G.text : G.muted,
         textDecoration: 'none',
         fontSize: 13,
@@ -28,7 +28,7 @@ function NavItem({ href, label, active, icon }: {
         transition: 'all 0.12s',
       }}
     >
-      <span style={{ opacity: active ? 1 : 0.6 }}>{icon}</span>
+      <span style={{ opacity: active ? 1 : 0.5 }}>{icon}</span>
       {label}
     </Link>
   );
@@ -80,9 +80,8 @@ export default function GrowthLayout({ children }: { children: React.ReactNode }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: G.bg, fontFamily: "'DM Sans', sans-serif" }}>
-      {/* Dark sidebar */}
       <aside style={{
-        width: 232,
+        width: 230,
         background: G.surface,
         borderRight: `1px solid ${G.border}`,
         display: 'flex',
@@ -90,27 +89,24 @@ export default function GrowthLayout({ children }: { children: React.ReactNode }
         position: 'sticky',
         top: 0,
         height: '100vh',
-        padding: '18px 10px',
+        padding: '20px 12px',
         flexShrink: 0,
         overflowY: 'auto',
       }}>
-        {/* Header */}
-        <div style={{ padding: '0 12px', marginBottom: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ padding: '0 14px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: G.text, letterSpacing: '-0.01em' }}>AUSTERE</div>
-            <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: G.accent, marginTop: 1 }}>Growth Engine</div>
+            <div className="font-display" style={{ fontSize: 18, color: G.text }}>Growth Engine</div>
+            <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: G.accent }}>by AUSTERE</div>
           </div>
           <AppLauncher />
         </div>
 
-        {/* Role badge */}
-        <div style={{ padding: '0 12px', marginBottom: 16 }}>
+        <div style={{ padding: '0 14px', marginBottom: 16 }}>
           <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, background: G.accentBg, border: `1px solid ${G.accentBorder}`, color: G.accent, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
             {role}
           </span>
         </div>
 
-        {/* Nav */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <NavItem href="/growth/dashboard" label="Dashboard" active={pathname === '/growth' || pathname === '/growth/dashboard'} icon={icons.dashboard} />
           {isCoachOrAdmin && (
@@ -123,16 +119,16 @@ export default function GrowthLayout({ children }: { children: React.ReactNode }
           )}
           {isAdmin && (
             <>
-              <div style={{ height: 1, background: G.border, margin: '8px 12px' }} />
+              <div style={{ height: 1, background: G.border, margin: '8px 14px' }} />
+              <div style={{ fontSize: 9, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: G.dim, padding: '4px 14px' }}>Admin</div>
               <NavItem href="/growth/admin" label="DM Automation" active={pathname.startsWith('/growth/admin')} icon={icons.admin} />
             </>
           )}
         </nav>
 
-        {/* Bottom user card */}
-        <div style={{ marginTop: 'auto', borderTop: `1px solid ${G.border}`, paddingTop: 14, padding: '14px 12px 0' }}>
-          <div style={{ fontSize: 12, color: G.muted, marginBottom: 2 }}>{profile?.full_name ?? 'Artist'}</div>
-          <div style={{ fontSize: 11, color: G.dim, marginBottom: 10 }}>{profile?.email}</div>
+        <div className="mt-auto" style={{ borderTop: `1px solid ${G.border}`, paddingTop: 12, padding: '12px 14px 0' }}>
+          <div style={{ fontSize: 12, color: G.muted }}>{profile?.full_name ?? 'Artist'}</div>
+          <div style={{ fontSize: 11, color: G.dim, marginTop: 1, marginBottom: 8 }}>{profile?.email}</div>
           <button
             onClick={async () => { await supabase.auth.signOut(); router.replace('/'); }}
             style={{ fontSize: 11, color: G.dim, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontFamily: 'inherit' }}
@@ -142,8 +138,7 @@ export default function GrowthLayout({ children }: { children: React.ReactNode }
         </div>
       </aside>
 
-      {/* Main content */}
-      <main style={{ flex: 1, padding: '32px 40px', overflowY: 'auto' }}>
+      <main style={{ flex: 1, padding: '28px 36px', maxWidth: 860, background: G.bg }}>
         {children}
       </main>
     </div>
