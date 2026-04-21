@@ -6,6 +6,19 @@ import { supabase } from '@/lib/supabase';
 import { G } from '@/lib/growth/colors';
 import { fetchGrowthHistory, fetchPlatformStats } from '@/lib/growth/stats';
 import type { GrowthPoint, PlatformStats, Task, Note, Profile, ArtistData } from '@/lib/growth/types';
+
+interface Post {
+  id: string;
+  platform: string;
+  post_url: string | null;
+  thumbnail_url: string | null;
+  caption: string | null;
+  likes_count: number | null;
+  comments_count: number | null;
+  views_count: number | null;
+  posted_at: string | null;
+  scraped_at: string;
+}
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -89,6 +102,8 @@ export default function RosterDetailPage() {
   const [platformStats, setPlatformStats] = useState<PlatformStats[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [postFilter, setPostFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
@@ -131,16 +146,18 @@ export default function RosterDetailPage() {
 
       if (art) {
         setArtistData(art);
-        const [history, platforms, taskData, noteData] = await Promise.all([
+        const [history, platforms, taskData, noteData, postData] = await Promise.all([
           fetchGrowthHistory(art.id),
           fetchPlatformStats(art.id),
           supabase.from('tasks').select('*').eq('artist_id', profileId).order('created_at', { ascending: false }),
           supabase.from('notes').select('*, author:profiles!notes_author_id_fkey(full_name, role)').eq('artist_id', profileId).order('created_at', { ascending: false }),
+          supabase.from('posts').select('*').eq('artist_id', art.id).order('posted_at', { ascending: false }).limit(48),
         ]);
         setChartPoints(history.points);
         setPlatformStats(platforms);
         setTasks((taskData.data as Task[]) ?? []);
         setNotes((noteData.data as Note[]) ?? []);
+        setPosts((postData.data as Post[]) ?? []);
       } else {
         // Load tasks/notes even without artist_data
         const [taskData, noteData] = await Promise.all([
@@ -389,6 +406,120 @@ export default function RosterDetailPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* Recent Posts */}
+      {(posts.length > 0 || artistData) && (
+        <div style={{ background: G.surface, border: `1px solid ${G.border}`, borderRadius: 12, padding: '20px 24px', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: G.text }}>Recent Posts</div>
+              <div style={{ fontSize: 11, color: G.dim }}>
+                {posts.length > 0
+                  ? `${posts.length} posts across ${[...new Set(posts.map(p => p.platform))].join(', ')}`
+                  : 'Sync stats to load posts'}
+              </div>
+            </div>
+            {posts.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {['all', ...[...new Set(posts.map(p => p.platform))]].map(plt => (
+                  <button
+                    key={plt}
+                    onClick={() => setPostFilter(plt)}
+                    style={{
+                      fontSize: 11, padding: '3px 10px', borderRadius: 5, cursor: 'pointer',
+                      fontFamily: 'inherit', border: '1px solid',
+                      background: postFilter === plt ? (plt === 'all' ? G.text : PLATFORM_COLORS[plt]) : 'transparent',
+                      color: postFilter === plt ? (plt === 'all' ? G.bg : G.bg) : (plt === 'all' ? G.muted : PLATFORM_COLORS[plt]),
+                      borderColor: postFilter === plt ? 'transparent' : (plt === 'all' ? G.border : `${PLATFORM_COLORS[plt]}50`),
+                    }}
+                  >
+                    {plt.charAt(0).toUpperCase() + plt.slice(1)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {posts.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0', gap: 10 }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={G.dim} strokeWidth="1.5">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+              </svg>
+              <div style={{ fontSize: 13, color: G.muted }}>No posts yet — hit &quot;Sync stats&quot; to pull recent content.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+              {posts
+                .filter(p => postFilter === 'all' || p.platform === postFilter)
+                .map(post => {
+                  const color = PLATFORM_COLORS[post.platform] ?? G.accent;
+                  const dateStr = post.posted_at
+                    ? new Date(post.posted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : null;
+                  return (
+                    <a
+                      key={post.id}
+                      href={post.post_url ?? '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ textDecoration: 'none', display: 'block', borderRadius: 8, overflow: 'hidden', border: `1px solid ${G.border}`, background: G.surfaceAlt, transition: 'border-color 0.12s' }}
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = G.borderHover)}
+                      onMouseLeave={e => (e.currentTarget.style.borderColor = G.border)}
+                    >
+                      {/* Thumbnail */}
+                      <div style={{ aspectRatio: '1', background: G.surfaceHover, position: 'relative', overflow: 'hidden' }}>
+                        {post.thumbnail_url ? (
+                          <img
+                            src={post.thumbnail_url}
+                            alt={post.caption ?? ''}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={G.dim} strokeWidth="1.5">
+                              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                              <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                          </div>
+                        )}
+                        {/* Platform dot */}
+                        <div style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: color, boxShadow: '0 0 0 2px white' }} />
+                      </div>
+
+                      {/* Meta */}
+                      <div style={{ padding: '8px 10px' }}>
+                        {post.caption && (
+                          <div style={{ fontSize: 11, color: G.text, lineHeight: 1.4, marginBottom: 6, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
+                            {post.caption}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {post.likes_count !== null && (
+                              <span style={{ fontSize: 10, color: G.dim, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <svg width="9" height="9" viewBox="0 0 24 24" fill={G.dim} stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                {post.likes_count >= 1000 ? `${(post.likes_count / 1000).toFixed(1)}k` : post.likes_count}
+                              </span>
+                            )}
+                            {post.views_count !== null && (
+                              <span style={{ fontSize: 10, color: G.dim, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={G.dim} strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                {post.views_count >= 1000 ? `${(post.views_count / 1000).toFixed(1)}k` : post.views_count}
+                              </span>
+                            )}
+                          </div>
+                          {dateStr && <span style={{ fontSize: 9, color: G.dim, whiteSpace: 'nowrap' }}>{dateStr}</span>}
+                        </div>
+                      </div>
+                    </a>
+                  );
+                })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Tasks + Notes */}

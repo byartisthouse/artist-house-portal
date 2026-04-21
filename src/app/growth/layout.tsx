@@ -116,9 +116,11 @@ export default function GrowthLayout({ children }: { children: React.ReactNode }
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <NavItem href="/growth/dashboard" label="Dashboard" active={pathname === '/growth' || pathname === '/growth/dashboard'} icon={icons.dashboard} />
           {isCoachOrAdmin && (
             <NavItem href="/growth/roster" label="Roster" active={pathname.startsWith('/growth/roster')} icon={icons.roster} />
+          )}
+          {!isCoachOrAdmin && (
+            <NavItem href="/growth/dashboard" label="Dashboard" active={pathname === '/growth' || pathname === '/growth/dashboard'} icon={icons.dashboard} />
           )}
           <NavItem href="/growth/tasks" label="Tasks" active={pathname.startsWith('/growth/tasks')} icon={icons.tasks} />
           <NavItem href="/growth/notes" label="Notes" active={pathname.startsWith('/growth/notes')} icon={icons.notes} />
