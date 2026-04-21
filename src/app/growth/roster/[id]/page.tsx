@@ -108,6 +108,11 @@ export default function RosterDetailPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
 
+  // Edit handles form
+  const [editingHandles, setEditingHandles] = useState(false);
+  const [handleForm, setHandleForm] = useState({ instagram_handle: '', tiktok_handle: '', spotify_handle: '', youtube_handle: '' });
+  const [savingHandles, setSavingHandles] = useState(false);
+
   // Add task form
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
@@ -190,6 +195,39 @@ export default function RosterDetailPage() {
     } finally {
       setSyncing(false);
     }
+  }
+
+  function openEditHandles() {
+    setHandleForm({
+      instagram_handle: artistData?.instagram_handle ?? '',
+      tiktok_handle: artistData?.tiktok_handle ?? '',
+      spotify_handle: artistData?.spotify_handle ?? '',
+      youtube_handle: artistData?.youtube_handle ?? '',
+    });
+    setEditingHandles(true);
+  }
+
+  async function saveHandles(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingHandles(true);
+    const payload = {
+      user_id: profileId,
+      instagram_handle: handleForm.instagram_handle.trim().replace(/^@/, '') || null,
+      tiktok_handle: handleForm.tiktok_handle.trim().replace(/^@/, '') || null,
+      spotify_handle: handleForm.spotify_handle.trim() || null,
+      youtube_handle: handleForm.youtube_handle.trim().replace(/^@/, '') || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await supabase
+      .from('artist_data')
+      .upsert(payload, { onConflict: 'user_id' })
+      .select()
+      .single();
+    if (!error && data) {
+      setArtistData(data as ArtistData);
+    }
+    setSavingHandles(false);
+    setEditingHandles(false);
   }
 
   async function toggleTask(taskId: string, current: Task['status']) {
@@ -282,37 +320,78 @@ export default function RosterDetailPage() {
           </div>
           <div style={{ fontSize: 12, color: G.dim, marginBottom: artistData ? 10 : 0 }}>{artist?.email}</div>
 
-          {/* Handles */}
-          {artistData && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: artistData.artist_goals ? 10 : 0 }}>
-              {artistData.instagram_handle && (
-                <span style={{ fontSize: 11, color: PLATFORM_COLORS.instagram, background: `${PLATFORM_COLORS.instagram}14`, border: `1px solid ${PLATFORM_COLORS.instagram}30`, borderRadius: 4, padding: '2px 8px' }}>
-                  IG @{artistData.instagram_handle}
-                </span>
+          {/* Handles — view or edit */}
+          {editingHandles ? (
+            <form onSubmit={saveHandles} style={{ marginTop: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                {([
+                  { key: 'instagram_handle', label: 'Instagram', prefix: '@', color: PLATFORM_COLORS.instagram },
+                  { key: 'tiktok_handle',   label: 'TikTok',    prefix: '@', color: PLATFORM_COLORS.tiktok },
+                  { key: 'spotify_handle',  label: 'Spotify',   prefix: '',  color: PLATFORM_COLORS.spotify },
+                  { key: 'youtube_handle',  label: 'YouTube',   prefix: '@', color: PLATFORM_COLORS.youtube },
+                ] as const).map(({ key, label, prefix, color }) => (
+                  <div key={key}>
+                    <label style={{ display: 'block', fontSize: 10, color, marginBottom: 3, fontWeight: 500 }}>{label}</label>
+                    <div style={{ display: 'flex', alignItems: 'center', background: G.surfaceAlt, border: `1px solid ${G.border}`, borderRadius: 6, overflow: 'hidden' }}>
+                      {prefix && <span style={{ fontSize: 12, color: G.dim, padding: '0 6px' }}>{prefix}</span>}
+                      <input
+                        value={handleForm[key]}
+                        onChange={e => setHandleForm(f => ({ ...f, [key]: e.target.value }))}
+                        placeholder={`${label} handle`}
+                        style={{ flex: 1, background: 'transparent', border: 'none', padding: '7px 8px 7px 0', fontSize: 12, color: G.text, fontFamily: 'inherit', outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="submit" disabled={savingHandles} style={{ fontSize: 12, color: G.bg, background: G.accent, border: 'none', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontFamily: 'inherit', opacity: savingHandles ? 0.6 : 1 }}>
+                  {savingHandles ? 'Saving…' : 'Save handles'}
+                </button>
+                <button type="button" onClick={() => setEditingHandles(false)} style={{ fontSize: 12, color: G.muted, background: 'transparent', border: `1px solid ${G.border}`, borderRadius: 6, padding: '7px 12px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: artistData?.artist_goals ? 10 : 0 }}>
+                {artistData?.instagram_handle && (
+                  <span style={{ fontSize: 11, color: PLATFORM_COLORS.instagram, background: `${PLATFORM_COLORS.instagram}14`, border: `1px solid ${PLATFORM_COLORS.instagram}30`, borderRadius: 4, padding: '2px 8px' }}>
+                    IG @{artistData.instagram_handle}
+                  </span>
+                )}
+                {artistData?.tiktok_handle && (
+                  <span style={{ fontSize: 11, color: PLATFORM_COLORS.tiktok, background: `${PLATFORM_COLORS.tiktok}14`, border: `1px solid ${PLATFORM_COLORS.tiktok}30`, borderRadius: 4, padding: '2px 8px' }}>
+                    TT @{artistData.tiktok_handle}
+                  </span>
+                )}
+                {artistData?.spotify_handle && (
+                  <span style={{ fontSize: 11, color: PLATFORM_COLORS.spotify, background: `${PLATFORM_COLORS.spotify}14`, border: `1px solid ${PLATFORM_COLORS.spotify}30`, borderRadius: 4, padding: '2px 8px' }}>
+                    Spotify: {artistData.spotify_handle}
+                  </span>
+                )}
+                {artistData?.youtube_handle && (
+                  <span style={{ fontSize: 11, color: PLATFORM_COLORS.youtube, background: `${PLATFORM_COLORS.youtube}14`, border: `1px solid ${PLATFORM_COLORS.youtube}30`, borderRadius: 4, padding: '2px 8px' }}>
+                    YT @{artistData.youtube_handle}
+                  </span>
+                )}
+                {!artistData?.instagram_handle && !artistData?.tiktok_handle && !artistData?.spotify_handle && !artistData?.youtube_handle && (
+                  <span style={{ fontSize: 11, color: G.dim }}>No handles set</span>
+                )}
+                <button
+                  onClick={openEditHandles}
+                  style={{ fontSize: 11, color: G.muted, background: 'transparent', border: `1px solid ${G.border}`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  Edit
+                </button>
+              </div>
+              {artistData?.artist_goals && (
+                <div style={{ fontSize: 12, color: G.muted, fontStyle: 'italic', maxWidth: 560, lineHeight: 1.5 }}>
+                  &ldquo;{artistData.artist_goals}&rdquo;
+                </div>
               )}
-              {artistData.tiktok_handle && (
-                <span style={{ fontSize: 11, color: PLATFORM_COLORS.tiktok, background: `${PLATFORM_COLORS.tiktok}14`, border: `1px solid ${PLATFORM_COLORS.tiktok}30`, borderRadius: 4, padding: '2px 8px' }}>
-                  TT @{artistData.tiktok_handle}
-                </span>
-              )}
-              {artistData.spotify_handle && (
-                <span style={{ fontSize: 11, color: PLATFORM_COLORS.spotify, background: `${PLATFORM_COLORS.spotify}14`, border: `1px solid ${PLATFORM_COLORS.spotify}30`, borderRadius: 4, padding: '2px 8px' }}>
-                  Spotify: {artistData.spotify_handle}
-                </span>
-              )}
-              {artistData.youtube_handle && (
-                <span style={{ fontSize: 11, color: PLATFORM_COLORS.youtube, background: `${PLATFORM_COLORS.youtube}14`, border: `1px solid ${PLATFORM_COLORS.youtube}30`, borderRadius: 4, padding: '2px 8px' }}>
-                  YT @{artistData.youtube_handle}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Goals */}
-          {artistData?.artist_goals && (
-            <div style={{ fontSize: 12, color: G.muted, fontStyle: 'italic', maxWidth: 560, lineHeight: 1.5 }}>
-              &ldquo;{artistData.artist_goals}&rdquo;
-            </div>
+            </>
           )}
         </div>
 
@@ -326,14 +405,18 @@ export default function RosterDetailPage() {
             {syncing ? 'Syncing…' : 'Sync stats'}
           </button>
           {syncMsg && <span style={{ fontSize: 11, color: syncMsg.includes('synced') ? G.accent : G.red }}>{syncMsg}</span>}
-          {!artistData && <span style={{ fontSize: 11, color: G.dim }}>No profile yet</span>}
+          {!artistData && (
+            <button onClick={openEditHandles} style={{ fontSize: 11, color: G.accent, background: G.accentBg, border: `1px solid ${G.accentBorder}`, borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+              + Add handles
+            </button>
+          )}
         </div>
       </div>
 
-      {/* No artist_data notice */}
-      {!artistData && (
+      {/* No artist_data notice (only when not editing) */}
+      {!artistData && !editingHandles && (
         <div style={{ background: G.amberBg, border: `1px solid ${G.amberBorder}`, borderRadius: 10, padding: '14px 18px', marginBottom: 24, fontSize: 13, color: G.amber }}>
-          This artist hasn&apos;t completed onboarding — no social handles or growth data yet.
+          This artist hasn&apos;t completed onboarding. Use &ldquo;+ Add handles&rdquo; to set their social profiles.
         </div>
       )}
 
