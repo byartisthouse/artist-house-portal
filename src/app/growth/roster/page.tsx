@@ -63,7 +63,7 @@ export default function RosterPage() {
       const { data: profiles } = await supabase
         .from('profiles')
         .select('*')
-        .eq('role', 'Artist')
+        .in('role', ['Paid Member', 'Free Member'])
         .order('full_name');
 
       if (!profiles) { setLoading(false); return; }

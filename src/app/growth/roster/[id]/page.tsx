@@ -260,7 +260,7 @@ export default function RosterDetailPage() {
               {artist?.full_name ?? artist?.email}
             </div>
             <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: G.accentBg, border: `1px solid ${G.accentBorder}`, color: G.accent }}>
-              Artist
+              {artist?.role ?? 'Paid Member'}
             </span>
           </div>
           <div style={{ fontSize: 12, color: G.dim, marginBottom: artistData ? 10 : 0 }}>{artist?.email}</div>

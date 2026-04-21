@@ -1,4 +1,4 @@
-export type Role = 'Artist' | 'Coach' | 'Admin';
+export type Role = 'Paid Member' | 'Free Member' | 'Coach' | 'Admin';
 
 export interface Profile {
   id: string;

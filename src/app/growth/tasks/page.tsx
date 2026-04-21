@@ -47,7 +47,7 @@ export default function TasksPage() {
       if (isCoachOrAdmin) {
         const [{ data: taskData }, { data: artistData }] = await Promise.all([
           supabase.from('tasks').select('*, artist:profiles!tasks_artist_id_fkey(full_name)').order('created_at', { ascending: false }),
-          supabase.from('profiles').select('id, full_name').eq('role', 'Artist'),
+          supabase.from('profiles').select('id, full_name').in('role', ['Paid Member', 'Free Member']),
         ]);
         setTasks((taskData as TaskWithArtist[]) ?? []);
         setArtists(artistData ?? []);

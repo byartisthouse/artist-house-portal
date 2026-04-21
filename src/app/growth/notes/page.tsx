@@ -32,7 +32,7 @@ export default function NotesPage() {
       if (isCoachOrAdmin) {
         const [{ data: noteData }, { data: artistData }] = await Promise.all([
           supabase.from('notes').select('*, author:profiles!notes_author_id_fkey(full_name, role), artist:profiles!notes_artist_id_fkey(full_name)').order('created_at', { ascending: false }),
-          supabase.from('profiles').select('id, full_name').eq('role', 'Artist'),
+          supabase.from('profiles').select('id, full_name').in('role', ['Paid Member', 'Free Member']),
         ]);
         setNotes((noteData as NoteWithMeta[]) ?? []);
         setArtists(artistData ?? []);
@@ -51,7 +51,7 @@ export default function NotesPage() {
   async function addNote() {
     if (!form.content.trim() || !profile) return;
     setSaving(true);
-    const artistId = profile.role === 'Artist' ? profile.id : form.artist_id;
+    const artistId = (profile.role === 'Paid Member' || profile.role === 'Free Member') ? profile.id : form.artist_id;
     const { data, error } = await supabase.from('notes').insert({ artist_id: artistId, author_id: profile.id, content: form.content.trim() })
       .select('*, author:profiles!notes_author_id_fkey(full_name, role), artist:profiles!notes_artist_id_fkey(full_name)').single();
     if (!error && data) {
