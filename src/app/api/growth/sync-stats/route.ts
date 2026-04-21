@@ -1,90 +1,168 @@
 /**
  * POST /api/growth/sync-stats
  *
- * Triggers an Apify actor to scrape social stats for an artist, then writes
- * the results to the stats_history table.
+ * Runs one Apify actor per platform in parallel, normalizes results,
+ * and writes a stats_history row for each platform that has data.
  *
- * Body: { artistId: string }
+ * Body: { artistId: string }   (artist_data.id, NOT profiles.id)
  *
- * Modular design: swap fetchFromApify() for direct platform API calls in V2
- * without touching this route or any UI components.
+ * Required env vars:
+ *   APIFY_API_TOKEN              — your Apify API key
  *
- * Required env vars (set in Vercel):
- *   APIFY_API_TOKEN    — your Apify API token
- *   APIFY_ACTOR_ID     — the actor ID to run (e.g. "apify/instagram-scraper")
+ * Per-platform actor IDs (set whichever platforms you have):
+ *   APIFY_ACTOR_INSTAGRAM        e.g. "apify/instagram-profile-scraper"
+ *   APIFY_ACTOR_TIKTOK           e.g. "clockworks/tiktok-profile-scraper"
+ *   APIFY_ACTOR_YOUTUBE          e.g. "streamers/youtube-channel-scraper"
+ *   APIFY_ACTOR_SPOTIFY          e.g. "maxcopell/spotify-scraper" (optional)
+ *
+ * V2 upgrade path: replace the scrape* functions below with direct
+ * platform API calls — the route handler and DB writes stay unchanged.
  */
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// ─── Apify data fetcher (V1) ─────────────────────────────────────────────────
-// Replace the body of this function in V2 to call platform APIs directly.
-async function fetchFromApify(artistData: {
-  instagram_handle: string | null;
-  tiktok_handle: string | null;
-  spotify_handle: string | null;
-}): Promise<ApifyResult[]> {
-  const token = process.env.APIFY_API_TOKEN;
-  const actorId = process.env.APIFY_ACTOR_ID;
+// ─── Shared Apify runner ─────────────────────────────────────────────────────
 
-  if (!token || !actorId) {
-    throw new Error('APIFY_API_TOKEN and APIFY_ACTOR_ID must be set in environment variables.');
-  }
+async function runActor(actorId: string, input: unknown): Promise<unknown[]> {
+  const token = process.env.APIFY_API_TOKEN!;
 
-  const input = {
-    instagramHandles: artistData.instagram_handle ? [artistData.instagram_handle] : [],
-    tiktokHandles: artistData.tiktok_handle ? [artistData.tiktok_handle] : [],
-    spotifyHandles: artistData.spotify_handle ? [artistData.spotify_handle] : [],
-  };
-
-  // Run the actor
   const runRes = await fetch(
     `https://api.apify.com/v2/acts/${actorId}/runs?token=${token}`,
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }
   );
-  if (!runRes.ok) throw new Error(`Apify run failed: ${await runRes.text()}`);
-  const { data: run } = await runRes.json();
+  if (!runRes.ok) throw new Error(`Apify run failed for ${actorId}: ${await runRes.text()}`);
+  const { data: run } = await runRes.json() as { data: { id: string; status: string } };
 
-  // Poll for completion (max 60s)
+  // Poll up to 90s
   let status = run.status;
-  for (let i = 0; i < 12 && !['SUCCEEDED', 'FAILED', 'ABORTED'].includes(status); i++) {
+  for (let i = 0; i < 18 && !['SUCCEEDED', 'FAILED', 'ABORTED'].includes(status); i++) {
     await new Promise(r => setTimeout(r, 5000));
-    const statusRes = await fetch(`https://api.apify.com/v2/actor-runs/${run.id}?token=${token}`);
-    status = (await statusRes.json()).data?.status;
+    const s = await fetch(`https://api.apify.com/v2/actor-runs/${run.id}?token=${token}`);
+    status = ((await s.json()) as { data: { status: string } }).data?.status;
   }
-  if (status !== 'SUCCEEDED') throw new Error(`Apify actor ${status}`);
+  if (status !== 'SUCCEEDED') throw new Error(`Actor ${actorId} ended with status: ${status}`);
 
-  // Fetch dataset items
   const dataRes = await fetch(
     `https://api.apify.com/v2/actor-runs/${run.id}/dataset/items?token=${token}&clean=true`
   );
-  return await dataRes.json() as ApifyResult[];
+  return await dataRes.json() as unknown[];
 }
 
-interface ApifyResult {
-  platform: 'instagram' | 'tiktok' | 'spotify';
-  followerCount?: number;
-  followersCount?: number;
-  monthlyListeners?: number;
-  postsCount?: number;
-  engagementRate?: number;
-  topPostUrl?: string;
-  topPostLikes?: number;
+// ─── Per-platform scrapers ───────────────────────────────────────────────────
+// Each returns a partial stats row or null if skipped/failed.
+// Edit input shapes here if your actor version expects different field names.
+
+interface StatsRow {
+  platform: string;
+  follower_count: number | null;
+  listener_count: number | null;
+  post_count: number | null;
+  engagement_rate: number | null;
+  top_post_url: string | null;
+  top_post_likes: number | null;
 }
 
-function normalizeApifyResult(item: ApifyResult, platform: string) {
-  return {
-    platform,
-    follower_count: item.followerCount ?? item.followersCount ?? null,
-    listener_count: item.monthlyListeners ?? null,
-    post_count: item.postsCount ?? null,
-    engagement_rate: item.engagementRate ?? null,
-    top_post_url: item.topPostUrl ?? null,
-    top_post_likes: item.topPostLikes ?? null,
-  };
+async function scrapeInstagram(handle: string): Promise<StatsRow | null> {
+  const actorId = process.env.APIFY_ACTOR_INSTAGRAM;
+  if (!actorId || !handle) return null;
+  try {
+    // apify/instagram-profile-scraper input format
+    const items = await runActor(actorId, { usernames: [handle] }) as Record<string, unknown>[];
+    const item = items[0];
+    if (!item) return null;
+    return {
+      platform: 'instagram',
+      follower_count: (item.followersCount as number) ?? null,
+      listener_count: null,
+      post_count: (item.postsCount as number) ?? null,
+      engagement_rate: (item.engagementRate as number) ?? null,
+      top_post_url: null,
+      top_post_likes: null,
+    };
+  } catch (e) {
+    console.error('[sync] Instagram scrape failed:', e);
+    return null;
+  }
+}
+
+async function scrapeTikTok(handle: string): Promise<StatsRow | null> {
+  const actorId = process.env.APIFY_ACTOR_TIKTOK;
+  if (!actorId || !handle) return null;
+  try {
+    // clockworks/tiktok-profile-scraper input format
+    const profiles = [`https://www.tiktok.com/@${handle.replace(/^@/, '')}`];
+    const items = await runActor(actorId, { profiles }) as Record<string, unknown>[];
+    const item = items[0];
+    if (!item) return null;
+    // Output shape varies — handle both common formats
+    const stats = (item.authorStats ?? item.stats ?? item) as Record<string, unknown>;
+    return {
+      platform: 'tiktok',
+      follower_count: (stats.followerCount as number) ?? (stats.fans as number) ?? null,
+      listener_count: null,
+      post_count: (stats.videoCount as number) ?? null,
+      engagement_rate: null,
+      top_post_url: null,
+      top_post_likes: null,
+    };
+  } catch (e) {
+    console.error('[sync] TikTok scrape failed:', e);
+    return null;
+  }
+}
+
+async function scrapeYouTube(handle: string): Promise<StatsRow | null> {
+  const actorId = process.env.APIFY_ACTOR_YOUTUBE;
+  if (!actorId || !handle) return null;
+  try {
+    // streamers/youtube-channel-scraper input format
+    const url = handle.startsWith('http')
+      ? handle
+      : `https://www.youtube.com/@${handle.replace(/^@/, '')}`;
+    const items = await runActor(actorId, { startUrls: [{ url }] }) as Record<string, unknown>[];
+    const item = items[0];
+    if (!item) return null;
+    return {
+      platform: 'youtube',
+      follower_count: (item.subscriberCount as number) ?? null,
+      listener_count: null,
+      post_count: (item.videoCount as number) ?? null,
+      engagement_rate: null,
+      top_post_url: null,
+      top_post_likes: null,
+    };
+  } catch (e) {
+    console.error('[sync] YouTube scrape failed:', e);
+    return null;
+  }
+}
+
+async function scrapeSpotify(handle: string): Promise<StatsRow | null> {
+  const actorId = process.env.APIFY_ACTOR_SPOTIFY;
+  if (!actorId || !handle) return null;
+  try {
+    // Adjust input/output shape to match whichever Spotify actor you use
+    const items = await runActor(actorId, { artistNames: [handle] }) as Record<string, unknown>[];
+    const item = items[0];
+    if (!item) return null;
+    return {
+      platform: 'spotify',
+      follower_count: (item.monthlyListeners as number) ?? (item.followersCount as number) ?? null,
+      listener_count: (item.monthlyListeners as number) ?? null,
+      post_count: null,
+      engagement_rate: null,
+      top_post_url: null,
+      top_post_likes: null,
+    };
+  } catch (e) {
+    console.error('[sync] Spotify scrape failed:', e);
+    return null;
+  }
 }
 
 // ─── Route handler ───────────────────────────────────────────────────────────
+
 export async function POST(request: Request) {
   try {
     const { artistId } = await request.json() as { artistId?: string };
@@ -92,42 +170,56 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'artistId is required' }, { status: 400 });
     }
 
-    // Use service-role key for server-side writes (bypasses RLS)
+    if (!process.env.APIFY_API_TOKEN) {
+      return NextResponse.json({ error: 'APIFY_API_TOKEN is not set.' }, { status: 500 });
+    }
+
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    // Fetch artist handles
-    const { data: artistData, error: artistError } = await supabaseAdmin
+    const { data: artist, error: artistError } = await supabaseAdmin
       .from('artist_data')
-      .select('instagram_handle, tiktok_handle, spotify_handle')
+      .select('instagram_handle, tiktok_handle, spotify_handle, youtube_handle')
       .eq('id', artistId)
       .single();
 
-    if (artistError || !artistData) {
+    if (artistError || !artist) {
       return NextResponse.json({ error: 'Artist not found' }, { status: 404 });
     }
 
-    // Fetch from Apify
-    const results = await fetchFromApify(artistData);
+    // Run all configured platform scrapers in parallel
+    const [instagram, tiktok, youtube, spotify] = await Promise.all([
+      scrapeInstagram(artist.instagram_handle ?? ''),
+      scrapeTikTok(artist.tiktok_handle ?? ''),
+      scrapeYouTube(artist.youtube_handle ?? ''),
+      scrapeSpotify(artist.spotify_handle ?? ''),
+    ]);
 
-    // Upsert into stats_history
-    const rows = results.map(item => ({
-      artist_id: artistId,
-      recorded_at: new Date().toISOString(),
-      ...normalizeApifyResult(item, item.platform),
-    }));
+    const results = [instagram, tiktok, youtube, spotify].filter(Boolean) as StatsRow[];
 
-    if (rows.length > 0) {
-      const { error: insertError } = await supabaseAdmin
-        .from('stats_history')
-        .insert(rows);
-
-      if (insertError) throw new Error(insertError.message);
+    if (results.length === 0) {
+      return NextResponse.json({
+        success: false,
+        message: 'No platform actors are configured or no handles set for this artist.',
+      });
     }
 
-    return NextResponse.json({ success: true, synced: rows.length });
+    const rows = results.map(r => ({
+      artist_id: artistId,
+      recorded_at: new Date().toISOString(),
+      ...r,
+    }));
+
+    const { error: insertError } = await supabaseAdmin.from('stats_history').insert(rows);
+    if (insertError) throw new Error(insertError.message);
+
+    return NextResponse.json({
+      success: true,
+      synced: rows.length,
+      platforms: results.map(r => r.platform),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
