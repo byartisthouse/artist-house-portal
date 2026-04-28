@@ -45,6 +45,10 @@ const icons = {
 export default function GrowthLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Login page is unauthenticated — render it standalone without the sidebar
+  if (pathname === '/growth/login') return <>{children}</>;
+
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewAs, setViewAs] = useState<string | null>(null);
