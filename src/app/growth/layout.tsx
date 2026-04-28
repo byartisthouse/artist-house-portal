@@ -52,7 +52,7 @@ export default function GrowthLayout({ children }: { children: React.ReactNode }
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.replace('/'); return; }
+      if (!user) { router.replace('/growth/login'); return; }
 
       const { data } = await supabase
         .from('profiles')

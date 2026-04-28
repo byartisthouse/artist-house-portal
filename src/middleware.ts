@@ -2,6 +2,11 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  // Let the login page through without auth checks
+  if (request.nextUrl.pathname === '/growth/login') {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -25,14 +30,17 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Redirect unauthenticated users away from /growth
+  // Redirect unauthenticated users to the growth login page, preserving the destination
   if (!user) {
     const url = request.nextUrl.clone();
-    url.pathname = '/';
+    const next = request.nextUrl.pathname;
+    url.pathname = '/growth/login';
+    url.search = '';
+    if (next !== '/growth' && next !== '/growth/') url.searchParams.set('next', next);
     return NextResponse.redirect(url);
   }
 
-  // Role-gate /growth/admin — coaches and artists get redirected to dashboard
+  // Role-gate /growth/admin — non-admins get redirected to dashboard
   if (request.nextUrl.pathname.startsWith('/growth/admin')) {
     const { data: profile } = await supabase
       .from('profiles')

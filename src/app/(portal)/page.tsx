@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { C } from '@/lib/colors';
@@ -10,7 +11,12 @@ interface Counts { coaching: number; contacts: number; sync: number; tools: numb
 
 export default function Dashboard() {
   const { isPaid } = useAuth();
+  const router = useRouter();
   const [counts, setCounts] = useState<Counts>({ coaching: 0, contacts: 0, sync: 0, tools: 0 });
+
+  useEffect(() => {
+    router.replace('/growth');
+  }, [router]);
 
   useEffect(() => {
     async function load() {
