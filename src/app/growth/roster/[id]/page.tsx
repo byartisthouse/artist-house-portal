@@ -107,6 +107,7 @@ export default function RosterDetailPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [syncOk, setSyncOk] = useState<boolean | null>(null);
 
   // Edit handles form
   const [editingHandles, setEditingHandles] = useState(false);
@@ -182,16 +183,66 @@ export default function RosterDetailPage() {
     if (!artistData) return;
     setSyncing(true);
     setSyncMsg('');
+    setSyncOk(null);
+
+    // Cycle status messages while Apify actors run (takes 60-90s)
+    const stages = [
+      'Connecting to Apify…',
+      'Scraping Instagram…',
+      'Scraping TikTok…',
+      'Scraping YouTube…',
+      'Fetching posts…',
+      'Writing to database…',
+    ];
+    let stageIdx = 0;
+    setSyncMsg(stages[0]);
+    const ticker = setInterval(() => {
+      stageIdx = Math.min(stageIdx + 1, stages.length - 1);
+      setSyncMsg(stages[stageIdx]);
+    }, 15000);
+
     try {
       const res = await fetch('/api/growth/sync-stats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ artistId: artistData.id }),
       });
-      const json = await res.json();
-      setSyncMsg(res.ok ? 'Stats synced!' : json.error ?? 'Sync failed.');
+      clearInterval(ticker);
+      const json = await res.json() as {
+        success?: boolean;
+        synced?: number;
+        platforms?: string[];
+        posts?: number;
+        message?: string;
+        error?: string;
+      };
+
+      if (!res.ok || !json.success) {
+        const msg = json.error ?? json.message ?? 'Sync failed — no data returned.';
+        setSyncMsg(msg);
+        setSyncOk(false);
+        return;
+      }
+
+      // Build a human-readable summary
+      const platformList = (json.platforms ?? []).join(', ');
+      const postCount = json.posts ?? 0;
+      setSyncMsg(`Synced ${json.synced} platform${json.synced !== 1 ? 's' : ''} (${platformList}) · ${postCount} posts pulled`);
+      setSyncOk(true);
+
+      // Reload chart, platform stats, and posts without a full page refresh
+      const [history, platforms, postData] = await Promise.all([
+        fetchGrowthHistory(artistData.id),
+        fetchPlatformStats(artistData.id),
+        supabase.from('posts').select('*').eq('artist_id', artistData.id).order('posted_at', { ascending: false }).limit(48),
+      ]);
+      setChartPoints(history.points);
+      setPlatformStats(platforms);
+      setPosts((postData.data as Post[]) ?? []);
     } catch {
-      setSyncMsg('Network error.');
+      clearInterval(ticker);
+      setSyncMsg('Network error — check your connection and try again.');
+      setSyncOk(false);
     } finally {
       setSyncing(false);
     }
@@ -402,7 +453,14 @@ export default function RosterDetailPage() {
           >
             {syncing ? 'Syncing…' : 'Sync stats'}
           </button>
-          {syncMsg && <span style={{ fontSize: 11, color: syncMsg.includes('synced') ? G.accent : G.red }}>{syncMsg}</span>}
+          {syncMsg && (
+            <span style={{
+              fontSize: 11,
+              color: syncing ? G.muted : syncOk === true ? G.accent : syncOk === false ? G.red : G.muted,
+            }}>
+              {syncMsg}
+            </span>
+          )}
           {!artistData && (
             <button onClick={openEditHandles} style={{ fontSize: 11, color: G.accent, background: G.accentBg, border: `1px solid ${G.accentBorder}`, borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
               + Add handles
