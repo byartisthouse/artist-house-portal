@@ -120,7 +120,7 @@ async function scrapeInstagram(handle: string): Promise<ScrapeResult | null> {
 
 // ─── TikTok ───────────────────────────────────────────────────────────────────
 // Actor: clockworks/tiktok-profile-scraper
-// Output: first item is profile, remaining items are videos (or nested)
+// Output: ALL items are video objects; profile info lives in authorMeta of each
 
 async function scrapeTikTok(handle: string): Promise<ScrapeResult | null> {
   const actorId = process.env.APIFY_ACTOR_TIKTOK;
@@ -132,23 +132,23 @@ async function scrapeTikTok(handle: string): Promise<ScrapeResult | null> {
     });
     if (!items.length) return null;
 
-    // Profile data is typically in the first item
-    const profile = items[0];
-    const authorStats = (profile.authorStats ?? profile.stats ?? profile) as Record<string, unknown>;
+    // Profile stats are embedded in the authorMeta of each video
+    const first = items[0];
+    const authorMeta = (first.authorMeta ?? first.authorStats ?? first.author ?? {}) as Record<string, unknown>;
+    const followerCount =
+      (authorMeta.fans ?? authorMeta.followers ?? authorMeta.followerCount) as number | null ?? null;
+    const videoCount = (authorMeta.video ?? authorMeta.videoCount) as number | null ?? null;
 
-    // Videos may be in nested array or subsequent items
-    const rawVideos = (
-      (profile.videos as Record<string, unknown>[]) ??
-      items.slice(1)
-    ).slice(0, 12) as Record<string, unknown>[];
+    const rawVideos = items.slice(0, 12);
 
     const posts: PostRow[] = rawVideos.map(v => {
       const meta = (v.videoMeta ?? {}) as Record<string, unknown>;
+      const covers = v.covers as string[] | undefined;
       const ts = v.createTime ?? v.createTimeISO;
       return {
         platform: 'tiktok',
-        post_url: (v.webVideoUrl ?? v.videoUrl) as string | null,
-        thumbnail_url: (meta.coverUrl ?? v.covers) as string | null,
+        post_url: (v.webVideoUrl ?? v.videoUrl ?? (v.id ? `https://www.tiktok.com/@${cleanHandle}/video/${v.id}` : null)) as string | null,
+        thumbnail_url: (meta.coverUrl ?? meta.cover ?? (covers?.[0]) ?? v.cover) as string | null,
         caption: ((v.text ?? v.desc) as string ?? '').slice(0, 300) || null,
         likes_count: (v.diggCount ?? (v.stats as Record<string, unknown>)?.diggCount) as number | null,
         comments_count: (v.commentCount ?? (v.stats as Record<string, unknown>)?.commentCount) as number | null,
@@ -160,9 +160,9 @@ async function scrapeTikTok(handle: string): Promise<ScrapeResult | null> {
     return {
       stats: {
         platform: 'tiktok',
-        follower_count: (authorStats.followerCount ?? authorStats.fans) as number | null,
+        follower_count: followerCount,
         listener_count: null,
-        post_count: (authorStats.videoCount) as number | null,
+        post_count: videoCount,
         engagement_rate: null,
         top_post_url: posts[0]?.post_url ?? null,
         top_post_likes: posts[0]?.likes_count ?? null,
@@ -177,7 +177,8 @@ async function scrapeTikTok(handle: string): Promise<ScrapeResult | null> {
 
 // ─── YouTube ──────────────────────────────────────────────────────────────────
 // Actor: streamers/youtube-channel-scraper
-// Output: channel item + video items
+// Output: first item is channel data; remaining items are videos.
+// Channel fields vary by actor version — we try all known naming conventions.
 
 async function scrapeYouTube(handle: string): Promise<ScrapeResult | null> {
   const actorId = process.env.APIFY_ACTOR_YOUTUBE;
@@ -190,31 +191,54 @@ async function scrapeYouTube(handle: string): Promise<ScrapeResult | null> {
     const items = await runActor(actorId, { startUrls: [{ url }] });
     if (!items.length) return null;
 
-    const channel = items[0];
+    // Find the channel item (type === 'channel' or first item without videoId/url)
+    const channelIdx = items.findIndex(
+      it => it.type === 'channel' || (it.channelName ?? it.title ?? it.name) && !(it.videoId ?? it.url)
+    );
+    const channel = channelIdx >= 0 ? items[channelIdx] : items[0];
 
-    // Videos are remaining items or nested
-    const rawVideos = (
-      (channel.videos as Record<string, unknown>[]) ??
-      items.slice(1)
-    ).slice(0, 12) as Record<string, unknown>[];
+    // Subscriber count — different actors use different field names
+    const subscriberCount =
+      (channel.numberOfSubscribers ??
+       channel.subscriberCount ??
+       channel.subscribers ??
+       channel.channelSubscriberCount) as number | null ?? null;
 
-    const posts: PostRow[] = rawVideos.map(v => ({
-      platform: 'youtube',
-      post_url: (v.url ?? (v.id ? `https://www.youtube.com/watch?v=${v.id}` : null)) as string | null,
-      thumbnail_url: (v.thumbnailUrl ?? (v.id ? `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg` : null)) as string | null,
-      caption: ((v.title ?? v.name) as string ?? '').slice(0, 300) || null,
-      likes_count: (v.likes ?? v.likeCount) as number | null,
-      comments_count: (v.commentsCount ?? v.commentCount) as number | null,
-      views_count: (v.viewCount ?? v.views) as number | null,
-      posted_at: (v.date ?? v.publishedAt ?? v.uploadDate) as string | null,
-    }));
+    // Videos are all non-channel items, or a nested array
+    const videoItems = (channel.videos as Record<string, unknown>[]) ??
+      items.filter((_, i) => i !== (channelIdx >= 0 ? channelIdx : 0));
+
+    const rawVideos = videoItems.slice(0, 12);
+
+    const posts: PostRow[] = rawVideos.map(v => {
+      const videoId = (v.videoId ?? v.id) as string | undefined;
+      const rawUrl = (v.url ?? v.link ?? (videoId ? `https://www.youtube.com/watch?v=${videoId}` : null)) as string | null;
+      const thumbUrl = (
+        v.thumbnailUrl ??
+        v.thumbnail ??
+        (videoId ? `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` : null)
+      ) as string | null;
+      return {
+        platform: 'youtube',
+        post_url: rawUrl,
+        thumbnail_url: thumbUrl,
+        caption: ((v.title ?? v.name ?? v.text) as string ?? '').slice(0, 300) || null,
+        likes_count: (v.likes ?? v.likeCount ?? v.likesCount) as number | null,
+        comments_count: (v.commentsCount ?? v.commentCount ?? v.comments) as number | null,
+        views_count: (v.viewCount ?? v.views ?? v.viewsCount) as number | null,
+        posted_at: (v.date ?? v.publishedAt ?? v.uploadDate ?? v.publishedTime) as string | null,
+      };
+    });
+
+    console.log('[sync] YouTube channel fields:', Object.keys(channel).join(', '));
+    console.log('[sync] YouTube video count:', rawVideos.length, 'sample:', JSON.stringify(rawVideos[0] ?? {}).slice(0, 200));
 
     return {
       stats: {
         platform: 'youtube',
-        follower_count: (channel.subscriberCount ?? channel.subscribers) as number | null,
+        follower_count: subscriberCount,
         listener_count: null,
-        post_count: (channel.videoCount ?? channel.videos) as number | null,
+        post_count: (channel.channelTotalVideos ?? channel.videoCount ?? channel.totalVideos) as number | null,
         engagement_rate: null,
         top_post_url: posts[0]?.post_url ?? null,
         top_post_likes: posts[0]?.likes_count ?? null,

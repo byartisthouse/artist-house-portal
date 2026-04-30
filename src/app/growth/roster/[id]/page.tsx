@@ -328,7 +328,10 @@ export default function RosterDetailPage() {
 
   const totalFollowers = platformStats.reduce((s, p) => s + p.followers, 0);
   const weeklyGrowth = platformStats.reduce((s, p) => s + p.weeklyGrowth, 0);
+  // Only show growth if we have at least two data points per platform
+  const hasGrowthData = platformStats.some(p => p.weeklyGrowth !== 0);
   const spotifyStats = platformStats.find(p => p.platform === 'spotify');
+  const youtubeStats = platformStats.find(p => p.platform === 'youtube');
   const openTasks = tasks.filter(t => t.status !== 'Done').length;
 
   if (loading) {
@@ -485,19 +488,33 @@ export default function RosterDetailPage() {
             <StatCard
               label="Total Followers"
               value={totalFollowers > 0 ? totalFollowers.toLocaleString() : '—'}
-              trend={weeklyGrowth || undefined}
+              trend={hasGrowthData ? weeklyGrowth : undefined}
               sub="across all platforms"
             />
             <StatCard
               label="Weekly Growth"
-              value={weeklyGrowth !== 0 ? `${weeklyGrowth >= 0 ? '+' : ''}${weeklyGrowth.toLocaleString()}` : '—'}
-              sub="vs. last week"
+              value={hasGrowthData ? `${weeklyGrowth >= 0 ? '+' : ''}${weeklyGrowth.toLocaleString()}` : '—'}
+              sub={hasGrowthData ? 'vs. last week' : 'sync weekly to track'}
             />
-            <StatCard
-              label="Monthly Listeners"
-              value={spotifyStats ? spotifyStats.followers.toLocaleString() : '—'}
-              sub="Spotify"
-            />
+            {spotifyStats ? (
+              <StatCard
+                label="Monthly Listeners"
+                value={spotifyStats.followers.toLocaleString()}
+                sub="Spotify"
+              />
+            ) : youtubeStats ? (
+              <StatCard
+                label="YouTube Subscribers"
+                value={youtubeStats.followers > 0 ? youtubeStats.followers.toLocaleString() : '—'}
+                sub="subscribers"
+              />
+            ) : (
+              <StatCard
+                label="Monthly Listeners"
+                value="—"
+                sub="add Spotify handle to sync"
+              />
+            )}
             <StatCard
               label="Open Tasks"
               value={String(openTasks)}
@@ -610,20 +627,32 @@ export default function RosterDetailPage() {
                       onMouseLeave={e => (e.currentTarget.style.borderColor = G.border)}
                     >
                       {/* Thumbnail */}
-                      <div style={{ aspectRatio: '1', background: G.surfaceHover, position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ aspectRatio: '1', background: `${color}18`, position: 'relative', overflow: 'hidden' }}>
                         {post.thumbnail_url ? (
-                          <img
-                            src={post.thumbnail_url}
-                            alt={post.caption ?? ''}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                          />
+                          <>
+                            <img
+                              src={post.thumbnail_url}
+                              alt={post.caption ?? ''}
+                              referrerPolicy="no-referrer"
+                              crossOrigin="anonymous"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                              onError={e => {
+                                const img = e.target as HTMLImageElement;
+                                img.style.display = 'none';
+                                const sibling = img.nextElementSibling as HTMLElement | null;
+                                if (sibling) sibling.style.display = 'flex';
+                              }}
+                            />
+                            {/* Shown when image fails to load */}
+                            <div style={{ display: 'none', position: 'absolute', inset: 0, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                              <span style={{ fontSize: 10, color: color, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{post.platform}</span>
+                              <span style={{ fontSize: 9, color: G.dim }}>Preview unavailable</span>
+                            </div>
+                          </>
                         ) : (
-                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={G.dim} strokeWidth="1.5">
-                              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-                              <polyline points="21 15 16 10 5 21"/>
-                            </svg>
+                          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                            <span style={{ fontSize: 10, color: color, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{post.platform}</span>
+                            <span style={{ fontSize: 9, color: G.dim }}>Preview unavailable</span>
                           </div>
                         )}
                         {/* Platform dot */}
