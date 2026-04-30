@@ -213,6 +213,7 @@ export default function RosterDetailPage() {
         synced?: number;
         platforms?: string[];
         posts?: number;
+        postWarning?: string;
         message?: string;
         error?: string;
       };
@@ -227,8 +228,9 @@ export default function RosterDetailPage() {
       // Build a human-readable summary
       const platformList = (json.platforms ?? []).join(', ');
       const postCount = json.posts ?? 0;
-      setSyncMsg(`Synced ${json.synced} platform${json.synced !== 1 ? 's' : ''} (${platformList}) · ${postCount} posts pulled`);
-      setSyncOk(true);
+      const base = `Synced ${json.synced} platform${json.synced !== 1 ? 's' : ''} (${platformList}) · ${postCount} post${postCount !== 1 ? 's' : ''} saved`;
+      setSyncMsg(json.postWarning ? `${base} — ⚠ ${json.postWarning}` : base);
+      setSyncOk(json.postWarning ? false : true);
 
       // Reload chart, platform stats, and posts without a full page refresh
       const [history, platforms, postData] = await Promise.all([

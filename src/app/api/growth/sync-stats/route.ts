@@ -312,6 +312,9 @@ export async function POST(request: Request) {
 
     // Refresh posts: delete stale rows per platform, insert fresh ones
     const allPosts = results.flatMap(r => r.posts);
+    let postsInserted = 0;
+    let postWarning: string | null = null;
+
     if (allPosts.length > 0) {
       const platforms = [...new Set(allPosts.map(p => p.platform))];
       await supabaseAdmin
@@ -322,14 +325,22 @@ export async function POST(request: Request) {
 
       const postRows = allPosts.map(p => ({ artist_id: artistId, scraped_at: now, ...p }));
       const { error: postError } = await supabaseAdmin.from('posts').insert(postRows);
-      if (postError) console.error('[sync] Post insert error:', postError.message);
+      if (postError) {
+        console.error('[sync] Post insert error:', postError.message);
+        postWarning = postError.message.includes('does not exist')
+          ? 'Posts table not found — run scripts/add-posts-table.sql in Supabase first.'
+          : `Posts not saved: ${postError.message}`;
+      } else {
+        postsInserted = allPosts.length;
+      }
     }
 
     return NextResponse.json({
       success: true,
       synced: results.length,
       platforms: results.map(r => r.stats.platform),
-      posts: allPosts.length,
+      posts: postsInserted,
+      postWarning,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
