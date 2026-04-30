@@ -19,6 +19,8 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 // ─── Shared Apify runner ─────────────────────────────────────────────────────
 
@@ -282,6 +284,32 @@ async function scrapeSpotify(handle: string): Promise<ScrapeResult | null> {
 
 export async function POST(request: Request) {
   try {
+    // Verify the caller is an authenticated Coach or Admin
+    const cookieStore = await cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll() {},
+        },
+      }
+    );
+
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: profile } = await supabaseAuth
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['Coach', 'Admin'].includes(profile.role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const { artistId } = await request.json() as { artistId?: string };
     if (!artistId) {
       return NextResponse.json({ error: 'artistId is required' }, { status: 400 });
