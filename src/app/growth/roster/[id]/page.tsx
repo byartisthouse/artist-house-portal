@@ -216,16 +216,14 @@ export default function RosterDetailPage() {
       tiktok_handle: handleForm.tiktok_handle.trim().replace(/^@/, '') || null,
       spotify_handle: handleForm.spotify_handle.trim() || null,
       youtube_handle: handleForm.youtube_handle.trim().replace(/^@/, '') || null,
-      updated_at: new Date().toISOString(),
     };
-    const { data, error } = await supabase
-      .from('artist_data')
-      .upsert(payload, { onConflict: 'user_id' })
-      .select()
-      .single();
-    if (!error && data) {
-      setArtistData(data as ArtistData);
-    }
+    const res = await fetch('/api/growth/save-handles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json() as { data?: ArtistData; error?: string };
+    if (json.data) setArtistData(json.data);
     setSavingHandles(false);
     setEditingHandles(false);
   }
